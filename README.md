@@ -2305,3 +2305,88 @@ python validate_gdml.py \
   output/gdml/tms_mapper.gdml \
   --mapper-runtime-path /pnfs/dune/persistent/users/USER/Mapper_global.txt
 ```
+
+
+---
+
+# Representative / effective magnetic-field plots
+
+`representative_field.py` addresses the expert-facing question:
+
+```text
+What is a representative magnetic-field scale in Region 1, Region 2,
+Region 3, and across the active TMS?
+```
+
+The analysis runs directly on the new uniform `Mapper.txt`.
+
+By default, only active field cells satisfying
+
+```text
+|B| > 0.01 T
+```
+
+enter the representative-field statistics. This avoids diluting the field
+scale with zero-field / unsupported grid cells.
+
+Because the mapper is uniformly gridded, each retained grid cell has the same
+volume. The regional mean is therefore an equal-cell-volume mean over active
+field cells.
+
+This is a representative **field-map** quantity. It is not a
+track-dependent bending field and it is not `integral(B dl)`.
+
+## Working regions
+
+```text
+Region 1 : z_min to -500 mm
+Region 2 : -500 to 2000 mm
+Region 3 : 2000 to 2900 mm
+```
+
+These are working expert-discussion boundaries and remain configurable.
+
+## Run
+
+```bash
+python representative_field.py Mapper.txt
+```
+
+Outputs:
+
+```text
+plots/representative_field/representative_B_profile_vs_z.png
+plots/representative_field/representative_B_regions.png
+plots/representative_field/active_field_fraction_vs_z.png
+plots/representative_field/representative_B_profile_vs_z.csv
+plots/representative_field/representative_B_regions.csv
+```
+
+The main z-profile contains the raw mean, smoothed mean, smoothed median,
+16–84% transverse spread, the three working region boundaries, and each
+region's representative mean `|B|`.
+
+The region summary plot compares:
+
+```text
+Region 1
+Region 2
+Region 3
+Whole active TMS
+```
+
+The exact numbers are also written to CSV.
+
+The default 150 mm smoothing is used only for visual presentation; the scalar
+region summaries are computed directly from unsmoothed active grid cells.
+
+Custom example:
+
+```bash
+python representative_field.py Mapper.txt \
+  --active-threshold 0.01 \
+  --smooth-mm 150 \
+  --region1-end -500 \
+  --region2-end 2000 \
+  --region3-end 2900
+```
