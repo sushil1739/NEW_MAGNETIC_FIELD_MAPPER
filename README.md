@@ -1891,3 +1891,417 @@ OUTPUT
 ```
 
 Use `validate_mapper.py` before simulation and `plot_mapper.py` to inspect the generated field before treating a map as production-ready.
+
+
+---
+
+# GDML generation and field-coordinate integration
+
+The repository can also generate a DUNE ND GDML using the official
+[`DUNE/dunendggd`](https://github.com/DUNE/dunendggd) geometry generator and
+connect the generated geometry to the realistic TMS field map.
+
+The integration intentionally does **not** copy the upstream geometry source
+into this repository. Instead, `generate_gdml.py` uses a pinned upstream
+revision so the geometry used with a field map is reproducible:
+
+```text
+DUNE/dunendggd
+commit 071b712939697093d4c811c5d80dbf6359b0d9d3
+```
+
+The upstream project is GPLv2 and uses GeGeDe to produce GDML.
+
+## Why the mapper must be aligned to GDML
+
+`edep-sim` defines `ArbBField` grid positions in **global detector
+coordinates**. The mapper built by `build_mapper.py` is initially expressed in
+the TMS field-model coordinate frame.
+
+Therefore the integration first determines where TMS is placed in the generated
+GDML and converts the mapper's coordinate offsets into that **GDML global
+frame**.
+
+Conceptually:
+
+```text
+local field coordinate
+       +
+field -> TMS-local alignment
+       +
+TMS placement in GDML world
+       =
+global ArbBField coordinate
+```
+
+The resulting mapper is written separately as:
+
+```text
+output/Mapper_global.txt
+```
+
+The original `Mapper.txt` is never modified.
+
+## What is shifted
+
+For an axis-aligned TMS, the integration applies a pure translation:
+
+```text
+global X = local X + TX
+global Y = local Y + TY
+global Z = local Z + TZ
+```
+
+The same translation is applied to:
+
+1. the three mapper header offsets;
+2. the XYZ columns of every field-grid row.
+
+The uniform grid spacings:
+
+```text
+GRID_X_SIZE
+GRID_Y_SIZE
+GRID_Z_SIZE
+```
+
+and the field components:
+
+```text
+Bx By Bz |B|
+```
+
+are unchanged.
+
+If TMS has a non-zero rotation in GDML, the tool refuses to inject the field.
+A rotated regular grid cannot be made correct by changing offsets alone.
+
+## How the field-to-GDML alignment is determined
+
+The integration inspects generated `volTMS` and extracts the 15, 40, and 80 mm
+steel-layer placements.
+
+It then compares them with the original field-map plate positions.
+
+The local translation is obtained from:
+
+```text
+X: center of the TMS steel-layer placements
+Y: center of the TMS steel-layer placements
+Z: one best common translation matching field and GDML plate centers
+```
+
+Then:
+
+```text
+FIELD_TO_GLOBAL
+    =
+FIELD_TO_TMS_LOCAL
+    +
+TMS_GLOBAL_PLACEMENT
+```
+
+The global mapper header therefore becomes:
+
+```text
+OFFSET_GLOBAL = OFFSET_LOCAL + FIELD_TO_GLOBAL
+```
+
+while the grid spacing remains exactly the user-requested spacing.
+
+## Geometry compatibility is checked before injection
+
+A translation is only physically valid if the magnetic-field geometry and GDML
+describe the same plate layout.
+
+The integration checks:
+
+- 15 mm layer count;
+- 40 mm layer count;
+- 80 mm layer count;
+- plate-center positions;
+- median pitch of each plate family;
+- maximum residual after fitting one Z translation.
+
+If these cannot be reconciled by a single translation, generation stops before
+producing a production-style GDML/field pair.
+
+This prevents an offset correction from hiding a real geometry mismatch.
+
+## First-time setup
+
+Run:
+
+```bash
+python generate_gdml.py \
+  --bootstrap \
+  --mapper Mapper.txt \
+  --field-dir Field_maps \
+  --target tms_nosand \
+  --inspect-only
+```
+
+`--bootstrap`:
+
+1. clones the pinned `DUNE/dunendggd` revision into
+
+   ```text
+   ~/.cache/tms-mapper/dunendggd
+   ```
+
+2. checks out the pinned commit;
+3. installs the checkout and its GeGeDe dependencies in the active Python
+   environment.
+
+`tms_nosand` is the default because it builds much faster and is appropriate
+for mapper/GDML validation.
+
+## Inspect geometry compatibility first
+
+Recommended:
+
+```bash
+python generate_gdml.py \
+  --mapper Mapper.txt \
+  --field-dir Field_maps \
+  --target tms_nosand \
+  --inspect-only
+```
+
+The report includes:
+
+```text
+TMS global origin
+field -> TMS-local translation
+field -> GDML-global translation
+15/40/80 mm layer counts
+15/40/80 mm field and GDML pitches
+maximum Z residual
+RMS Z residual
+```
+
+## Generate the global mapper and mapper-enabled GDML
+
+After compatibility is accepted:
+
+```bash
+python generate_gdml.py \
+  --mapper Mapper.txt \
+  --field-dir Field_maps \
+  --target tms_nosand \
+  --output-mapper output/Mapper_global.txt \
+  --output-gdml output/gdml/tms_mapper.gdml
+```
+
+The workflow is:
+
+```text
+dunendggd
+    ↓
+raw GDML
+    ↓
+inspect volTMS global placement and steel layers
+    ↓
+compare GDML geometry with field geometry
+    ↓
+compute field -> global translation
+    ↓
+Mapper.txt
+    ↓
+Mapper_global.txt
+    ↓
+remove constant BField auxiliaries
+    ↓
+inject ArbBField into six steel logical volumes
+    ↓
+tms_mapper.gdml
+```
+
+## The six TMS logical volumes receiving the mapper
+
+The integration modifies:
+
+```text
+thinvolTMS
+thinvol2TMS
+thickvolTMS
+thickvol2TMS
+doublevolTMS
+doublevol2TMS
+```
+
+Any existing constant:
+
+```xml
+<auxiliary auxtype="BField" .../>
+```
+
+is removed from these six logical volumes.
+
+Each then receives:
+
+```xml
+<auxiliary
+    auxtype="ArbBField"
+    auxvalue="/path/to/Mapper_global.txt"/>
+```
+
+## Runtime path for batch/grid jobs
+
+The mapper path stored inside GDML can differ from the local output path.
+
+Example:
+
+```bash
+python generate_gdml.py \
+  --mapper Mapper.txt \
+  --field-dir Field_maps \
+  --mapper-runtime-path /pnfs/dune/persistent/users/USER/Mapper_global.txt \
+  --output-mapper output/Mapper_global.txt \
+  --output-gdml output/gdml/tms_mapper.gdml
+```
+
+The file is generated locally as:
+
+```text
+output/Mapper_global.txt
+```
+
+but GDML stores:
+
+```text
+/pnfs/dune/persistent/users/USER/Mapper_global.txt
+```
+
+## Supported dunendggd targets
+
+```text
+tms_nosand
+tms
+tms_drift1
+prism_nosand
+prism
+prism_drift1
+```
+
+For a PRISM geometry:
+
+```bash
+python generate_gdml.py \
+  --target prism_nosand \
+  --tms-shift-mm 15000 \
+  --lar-shift-mm 20000 \
+  --mapper Mapper.txt \
+  --field-dir Field_maps \
+  --inspect-only
+```
+
+Because the TMS placement is read from generated GDML, the PRISM translation is
+automatically included in the global mapper offset.
+
+## Validate generated GDML
+
+Inspect TMS placement and layer counts:
+
+```bash
+python validate_gdml.py output/gdml/raw_tms.gdml
+```
+
+Compare field geometry with GDML:
+
+```bash
+python validate_gdml.py \
+  output/gdml/raw_tms.gdml \
+  --mapper Mapper.txt \
+  --field-dir Field_maps
+```
+
+Validate the final six `ArbBField` auxiliaries:
+
+```bash
+python validate_gdml.py \
+  output/gdml/tms_mapper.gdml \
+  --mapper-runtime-path /pnfs/dune/persistent/users/USER/Mapper_global.txt
+```
+
+## Relationship between local and global mapper headers
+
+If the local mapper begins with:
+
+```text
+-3800 -2500 -4000 100 100 10
+```
+
+and the GDML-derived field translation is:
+
+```text
+TX TY TZ
+```
+
+then `Mapper_global.txt` begins with:
+
+```text
+-3800+TX  -2500+TY  -4000+TZ  100 100 10
+```
+
+The important distinction is:
+
+```text
+first 3 values = global origin / offsets
+last 3 values  = uniform grid spacing
+```
+
+GDML integration changes the first three values, not the spacing.
+
+## Diagnostic geometry mismatch override
+
+For development only:
+
+```bash
+--allow-geometry-mismatch
+```
+
+allows a file pair to be produced even if the field plate layout and generated
+GDML are not translation-compatible.
+
+The mismatch is still printed.
+
+Do not use such an output as production geometry until the discrepancy is
+understood and resolved.
+
+## Recommended end-to-end GDML workflow
+
+```bash
+# 1. Build the local uniform map
+python build_mapper.py \
+  --grid-x-size 100 \
+  --grid-y-size 100 \
+  --grid-z-size 10 \
+  -o Mapper.txt \
+  -v
+
+# 2. Validate its regular lattice
+python validate_mapper.py Mapper.txt
+
+# 3. Generate and inspect GDML before modifying coordinates
+python generate_gdml.py \
+  --bootstrap \
+  --mapper Mapper.txt \
+  --field-dir Field_maps \
+  --target tms_nosand \
+  --inspect-only
+
+# 4. Once the compatibility report is accepted, create simulation inputs
+python generate_gdml.py \
+  --mapper Mapper.txt \
+  --field-dir Field_maps \
+  --target tms_nosand \
+  --mapper-runtime-path /pnfs/dune/persistent/users/USER/Mapper_global.txt \
+  --output-mapper output/Mapper_global.txt \
+  --output-gdml output/gdml/tms_mapper.gdml
+
+# 5. Validate the final GDML field references
+python validate_gdml.py \
+  output/gdml/tms_mapper.gdml \
+  --mapper-runtime-path /pnfs/dune/persistent/users/USER/Mapper_global.txt
+```
