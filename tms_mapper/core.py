@@ -26,6 +26,39 @@ ReflectionMode = Literal["axial", "polar", "none"]
 ZPlacementMode = Literal["auto", "source", "zcoord"]
 
 
+TMS_COORDINATE_CONVENTION = (
+    "X=transverse-left-of-+Z;Y=up-opposite-gravity;Z=beam-direction"
+)
+
+
+def source_to_tms_axes(
+    points: np.ndarray,
+    fields: np.ndarray,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Return source coordinates/components in the TMS global convention.
+
+    Marco's .fld files are already expressed in the TMS global frame:
+
+      X : transverse horizontal axis, with +X to the left of +Z
+      Y : vertical axis, positive opposite gravity
+      Z : beam direction
+
+    The corresponding magnetic-field columns are Bx, By, Bz in those same
+    axes.  The mapping is therefore intentionally the identity mapping.
+
+    Keeping this conversion as an explicit function prevents a plotting
+    convention (for example, drawing Matplotlib's third axis vertically) from
+    ever being mistaken for a physical coordinate permutation in Mapper.txt.
+    """
+    points = np.asarray(points, dtype=np.float64)
+    fields = np.asarray(fields, dtype=np.float64)
+    if points.ndim != 2 or points.shape[1] != 3:
+        raise ValueError("points must have shape (N, 3)")
+    if fields.shape != points.shape:
+        raise ValueError("fields must have the same (N, 3) shape as points")
+    return points, fields
+
+
 @dataclass(frozen=True)
 class RawMapInfo:
     path: Path
@@ -227,7 +260,7 @@ def read_fld(
     points = np.asarray(xyz, dtype=np.float64)
     fields = np.asarray(bvec, dtype=np.float64)
     points *= scale
-    return points, fields
+    return source_to_tms_axes(points, fields)
 
 
 def reflect_axial_from_quarter(
@@ -793,6 +826,8 @@ def build_uniform_mapper(
             f"interpolation={interpolation} k={k_neighbors} idw_power={idw_power}",
             f"support_radius_mm={support_radius_mm}",
             f"reflection={reflection}",
+            f"coordinate_convention={TMS_COORDINATE_CONVENTION}",
+            "source_axis_mapping=x->X,y->Y,z->Z;Bx->Bx,By->By,Bz->Bz",
             "ordering=z-fastest,y-next,x-slowest",
         ]
         _write_edep_file(

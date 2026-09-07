@@ -28,11 +28,11 @@ def make_parser() -> argparse.ArgumentParser:
                    help="Output edep-sim mapper text file")
 
     p.add_argument("--grid-x-size", type=float, required=True, metavar="MM",
-                   help="Uniform X grid spacing in mm")
+                   help="Uniform TMS X spacing in mm (transverse; +X left of +Z)")
     p.add_argument("--grid-y-size", type=float, required=True, metavar="MM",
-                   help="Uniform Y grid spacing in mm")
+                   help="Uniform TMS Y spacing in mm (+Y opposite gravity)")
     p.add_argument("--grid-z-size", type=float, required=True, metavar="MM",
-                   help="Uniform Z grid spacing in mm")
+                   help="Uniform TMS Z spacing in mm (+Z along beam direction)")
 
     p.add_argument("--geometry", choices=("full", "quarter"), default="full",
                    help="Build full four-quadrant geometry (default) or source quarter")
@@ -122,6 +122,7 @@ def main() -> int:
     )
 
     print("\nTMS mapper plan" if args.dry_run else "\nTMS mapper written")
+    print("  coordinates   : X transverse/left of +Z; Y up (-gravity); Z beam")
     print(f"  geometry      : {summary.geometry}")
     print(f"  source maps   : {summary.source_maps}")
     print(f"  plate groups  : {summary.plate_groups}")

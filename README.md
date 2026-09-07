@@ -21,6 +21,31 @@ The builder:
 
 The raw files in `Field_maps/` are never modified.
 
+## TMS coordinate convention
+
+The mapper uses the TMS global detector axes everywhere — in the generated
+`Mapper.txt`, in magnetic-field components, and in plotting:
+
+```text
++Z : along the neutrino-beam direction
++Y : upward, opposite gravity
++X : transverse; +X is to the left of +Z
+```
+
+Marco's `.fld` columns are interpreted directly as
+`x y z Bx By Bz -> X Y Z Bx By Bz`; no numerical axis permutation is applied
+to the field map.  This is intentional: the source ranges themselves identify
+the long detector/beam axis as Z.  The plotting utility only changes the
+**display orientation** so Y is vertical and Z is visibly the beam direction.
+
+For 2D plots:
+
+```text
+XY : transverse view (looking along Z/beam); X horizontal, Y vertical
+XZ : top view; Z horizontal (beam), X transverse
+YZ : side view; Z horizontal (beam), Y vertical (up)
+```
+
 ---
 
 ## Install
@@ -89,8 +114,10 @@ All coordinates are in **mm** and magnetic field components are in **tesla**.
 Every following data row is
 
 ```text
-x y z Bx By Bz Bmag
+X Y Z Bx By Bz Bmag
 ```
+
+where `Z` is the beam coordinate and `Y` is positive opposite gravity.
 
 Rows are written in the ordering required by edep-sim:
 
