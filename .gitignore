@@ -3,3 +3,18 @@
 *.tmp
 __pycache__/
 *.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# Generated mapper outputs can be very large.
+Mapper.txt
+Mapper_*.txt
+*.mapper.txt
+
+# Generated validation/plot outputs.
+plots/
+output/
+*.png
+*.pdf
+*.svg
