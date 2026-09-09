@@ -1,6 +1,6 @@
 # TMS Magnetic Field Mapper
 
-Build a **full-geometry, uniformly spaced magnetic-field map** for the TMS from the supplied quarter-geometry finite-element field solution, validate the result for `ClarkMcGrew/edep-sim`, and make publication/debugging plots from the generated map.
+Build a **full-geometry, uniformly spaced magnetic-field map** for the TMS from the supplied quarter-geometry magnetic-field data, validate the result for `ClarkMcGrew/edep-sim`, and make publication/debugging plots from the generated map.
 
 The repository is designed around one practical workflow:
 
@@ -84,6 +84,7 @@ The main command-line programs are:
 build_mapper.py       build a uniform TMS magnetic-field map
 validate_mapper.py    validate the generated ArbBField text file
 plot_mapper.py        make 2D, scatter, quiver, and 3D plots
+compare_raw_vs_mapper.py  compare original .fld data against Mapper.txt
 scatter_xy.py         simple coordinate-only XY helper retained for convenience
 ```
 
@@ -117,6 +118,7 @@ NEW_MAGNETIC_FIELD_MAPPER/
 ├── plot_mapper.py
 ├── scatter_xy.py
 ├── validate_mapper.py
+├── compare_raw_vs_mapper.py
 ├── requirements.txt
 ├── README.md
 └── .gitignore
@@ -130,7 +132,7 @@ Generated files such as `Mapper.txt`, `Mapper_*.txt`, `plots/`, and `output/` ar
 
 ## What the supplied dataset represents
 
-The repository contains a finite-element magnetic-field solution for **one quarter of the transverse TMS geometry**.
+The repository contains a magnetic-field dataset for **one quarter of the transverse TMS geometry**.
 
 The supplied source quadrant is:
 
@@ -226,7 +228,7 @@ A different source length unit can be selected with:
 --source-length-unit mm
 ```
 
-The raw `.fld` sampling is **not a uniform Cartesian grid**. It is the source finite-element solution that must be resampled before use by `edep-sim`.
+The raw `.fld` sampling is **not a uniform Cartesian grid**. It is the original source field-map data that must be resampled before use by `edep-sim`.
 
 ---
 
@@ -460,7 +462,7 @@ The extra grid layer is intentional.
 
 ## 8. Interpolate the source field
 
-The source finite-element points are unstructured, so the mapper interpolates them onto the uniform output lattice.
+The original source points are unstructured, so the mapper interpolates them onto the uniform output lattice.
 
 Default:
 
@@ -494,7 +496,7 @@ Uniform-grid points too far from the supplied source field are assigned:
 B = (0, 0, 0)
 ```
 
-This prevents uncontrolled extrapolation far outside the finite-element mesh.
+This prevents uncontrolled extrapolation far outside the supported source field-map region.
 
 Other options:
 
@@ -958,6 +960,113 @@ X [100.]
 Y [100.]
 Z [10.]
 ```
+
+
+## Raw `.fld` vs `Mapper.txt` validation
+
+`validate_mapper.py` checks the regular-grid file structure. A separate
+cross-check is provided by:
+
+```bash
+python compare_raw_vs_mapper.py Mapper.txt \
+  --field-dir Field_maps \
+  --z -4000
+```
+
+This comparison intentionally uses **no magnetic-field threshold**. The
+`|B| > 0.01 T` definition is reserved for the separate representative-field
+analysis.
+
+The script produces four direct visual comparisons:
+
+```text
+plots/raw_vs_mapper_validation/
+├── 01_quarter_quiver_raw_vs_mapper.png
+├── 02_quarter_heatmap_raw_vs_mapper.png
+├── 03_full_quiver_raw_vs_mapper.png
+├── 04_full_heatmap_raw_vs_mapper.png
+├── 05_numerical_validation_components_table.png
+├── 06_numerical_validation_regions_table.png
+├── numerical_validation_components.csv
+└── numerical_validation_regions.csv
+```
+
+The four field plots compare:
+
+1. original quarter `.fld` vectors vs the quarter of `Mapper.txt`;
+2. original quarter `.fld` `|B|` vs the quarter of `Mapper.txt`;
+3. the original quarter reflected to the full geometry vs full `Mapper.txt`
+   field directions;
+4. the same full-geometry comparison for `|B|`.
+
+### Important plotting conventions
+
+The original `.fld` samples are irregular. In the raw heatmaps, a blank cell
+means **no original source sample landed in that display cell**; it does not
+automatically mean `B = 0`.
+
+For quiver plots, arrow lengths are normalized to make field direction easy to
+compare. Arrow colour represents `|B|`. A visible boundary arrow therefore
+does not imply that the field magnitude there is as large as in the main
+magnetized region.
+
+### Matching-coordinate numerical comparison
+
+For the numerical validation, `Mapper.txt` is evaluated at the original
+source-point coordinates. This is a point-by-point source-to-mapper check; the
+display heatmap binning is not used for the numerical errors.
+
+For the current `100 x 100 x 10 mm` reference mapper:
+
+```text
+source points compared: 1,101,050
+validation threshold:   none
+```
+
+| Quantity | Raw mean [T] | Mapper mean [T] | Bias [T] | MAE [T] | RMSE [T] | Correlation |
+|---|---:|---:|---:|---:|---:|---:|
+| `Bx` | 0.493419 | 0.489867 | -0.003552 | 0.071381 | 0.156249 | 0.983397 |
+| `By` | -0.112777 | -0.117725 | -0.004948 | 0.085537 | 0.213988 | 0.985430 |
+| `Bz` | 0.000052 | -0.000053 | -0.000105 | 0.067865 | 0.127723 | 0.188036 |
+| `|B|` | 1.549373 | 1.491884 | -0.057490 | 0.072937 | 0.169197 | 0.923803 |
+
+For `|B|`, the mapper mean is about `0.0575 T` lower than the raw source-point
+mean, corresponding to approximately `3.7%` at these sampled coordinates.
+The dominant transverse components `Bx` and `By` have correlations above
+`0.98`. The comparison therefore supports good preservation of the main
+field structure, with modest smoothing at the current grid resolution.
+
+`Bz` has a signed mean very close to zero in both datasets, so its Pearson
+correlation is not by itself a useful headline measure of mapper quality.
+Its absolute-error metrics should be considered together with the dominant
+components and total field magnitude.
+
+### Longitudinal-region cross-check
+
+Using the working local-Z regions and again applying **no field threshold**:
+
+| Region | Z range [mm] | Raw mean `|B|` [T] | Mapper mean `|B|` [T] | Difference [T] | Correlation |
+|---|---:|---:|---:|---:|---:|
+| Region 1 | -4000 to -500 | 1.533091 | 1.487344 | -0.045747 | 0.920479 |
+| Region 2 | -500 to 2000 | 1.562236 | 1.490827 | -0.071409 | 0.929091 |
+| Region 3 | 2000 to 2900 | 1.588434 | 1.509639 | -0.078795 | 0.933140 |
+| Whole TMS | -4000 to 3375 | 1.549373 | 1.491884 | -0.057490 | 0.923803 |
+
+These are **source-point-weighted validation numbers**. They are not the same
+quantity as a representative field averaged over a uniform active detector
+region. Representative-field values, including the `|B| > 0.01 T` active
+definition, should be reported separately.
+
+### Current support mask
+
+The current mapper uses a distance-based **source-support radius** to avoid
+uncontrolled interpolation far from supplied source points. Unsupported grid
+points are assigned `B = 0`.
+
+This is not yet a true steel-geometry mask. A geometry-aware mask should use
+the exact latest transverse steel outline, internal cut-outs, and gaps. Until
+that geometry is fixed, the source-support mask is retained and its limitation
+is stated explicitly.
 
 ---
 
