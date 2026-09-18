@@ -2499,3 +2499,51 @@ python representative_field.py Mapper.txt \
   --region2-end 2000 \
   --region3-end 2900
 ```
+
+---
+
+# Latest Representative-Field Analysis
+
+The representative-field analysis was updated from the earlier threshold-based method to a geometry- and steel-thickness-based approach.
+
+## Central-band analysis
+
+Central steel region:
+
+- `10 <= |x| <= 3730 mm`
+- `|y| <= 1780 mm`
+- Physical 20 mm centre gap preserved and excluded from the steel-field average.
+- No magnetic-field threshold or smoothing used in the representative-field calculation.
+
+Results:
+
+- R1 (15 mm): 1.394 T
+- R2 (40 mm): 1.313 T
+- R3 (80 mm): 1.304 T
+- Full TMS: 1.320 T
+
+Script: `TMS_central_band_weighted_B.py`
+
+## Flat-region analysis
+
+Stable longitudinal regions:
+
+- R1: `-3300 < z < -2300 mm`
+- R2: `-1800 < z < 200 mm`
+- R3: `300 < z < 3000 mm`
+
+Results:
+
+- R1: 1.374 T
+- R2: 1.313 T
+- R3: 1.293 T
+- Full TMS: 1.307 T
+
+Script: `TMS_central_band_weighted_B_flat_regions.py`
+
+Current progression:
+
+`Full steel: 1.373 T -> Central band: 1.320 T -> Flat central band: 1.307 T`
+
+Next validation will test automatic plateau selection and explicit physical-plate positions using `z_coord.csv`.
+
