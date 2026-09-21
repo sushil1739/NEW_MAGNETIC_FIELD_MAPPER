@@ -18,3 +18,10 @@ output/
 *.png
 *.pdf
 *.svg
+
+# Local analysis backups / browser exports / logs
+*_BACKUP.py
+*_backup.py
+*.html
+*_files/
+*.log
