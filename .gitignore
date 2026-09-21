@@ -25,3 +25,8 @@ output/
 *.html
 *_files/
 *.log
+
+# Simulation diagnostic outputs
+*.root
+*_DIAGNOSTIC.gdml
+Mapper_global*.txt
