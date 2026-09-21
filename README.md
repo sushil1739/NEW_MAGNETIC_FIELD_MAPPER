@@ -2378,6 +2378,19 @@ The mismatch is still printed.
 Do not use such an output as production geometry until the discrepancy is
 understood and resolved.
 
+### Current field-volume integration status
+
+The repository's GDML integration code currently supports applying the
+`ArbBField` map to the six TMS steel logical volumes.
+
+However, the successful EDepSim diagnostic configuration used one
+`ArbBField` auxiliary on the parent `volTMS` logical volume.
+
+Therefore, the final production choice between the parent-volume and
+six-child-volume configurations remains an integration validation item.
+The field map itself and the representative-field analysis are unaffected
+by this distinction.
+
 ## Recommended end-to-end GDML workflow
 
 ```bash
